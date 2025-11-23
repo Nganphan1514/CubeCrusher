@@ -1,0 +1,3 @@
+chạy 
+g++ main.cpp drawing.cpp logic.cpp input.cpp -o space_shooter -std=c++17 -finput-charset=UTF-8 -Wl,--subsystem,windows -lfreeglut -lopengl32 -lglu32 -lwinmm -lgdi32
+ ./space_shooter
