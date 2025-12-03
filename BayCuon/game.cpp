@@ -39,10 +39,6 @@ struct GameObject
     float rotation;
     float scale;
     float vy;
-    // State của cá:
-    // 0: Mới sinh, đang bơi, chưa quyết định nhảy
-    // 1: Đang nhảy lên khỏi mặt nước
-    // 2: Đã quyết định KHÔNG nhảy, hoặc đã nhảy xong và rớt xuống nước lại
     int state;
 };
 
@@ -86,15 +82,17 @@ std::vector<GameObject> fishes;
 std::vector<GameObject> clouds;
 std::vector<Particle> particles;
 
-// --- GAMEPLAY CONFIG ---
+// --- GAMEPLAY CONFIG (ĐÃ CHỈNH CHẬM LẠI) ---
 float fuel = 100.0f;
 const float maxFuel = 100.0f;
 const float COMMON_SIZE = 4.0f;
 const float COIN_THICKNESS = 1.0f;
 
-float gameSpeed = 0.6f;
-const float MAX_SPEED = 2.5f;
-const float SPEED_INC = 0.0005f;
+// [EDIT] Tốc độ game khởi điểm chậm hơn (0.6 -> 0.3)
+float gameSpeed = 0.3f;
+const float MAX_SPEED = 2.0f;
+// [EDIT] Tốc độ tăng độ khó chậm hơn (0.0005 -> 0.0001)
+const float SPEED_INC = 0.0001f;
 
 const int COIN_SEQUENCE_MIN = 3;
 const int COIN_SEQUENCE_MAX = 5;
@@ -102,11 +100,13 @@ const float SHOOT_FUEL_COST = 2.0f;
 const float COIN_FUEL_GAIN = 10.0f;
 const float HIT_ENEMY_FUEL_LOSS = 20.0f;
 
-// --- CONFIG CÁ (NEW) ---
-const int FISH_JUMP_CHANCE = 40;         // Tỷ lệ nhảy là 40% (0-100)
-const float FISH_GRAVITY = 0.25f;        // Trọng lực thấp để nhảy chậm (Cũ là 0.5f)
-const float FISH_JUMP_POWER_BASE = 7.0f; // Lực nhảy cơ bản thấp hơn (Cũ là 12.0f)
-const float FISH_WATER_LEVEL = -5.0f;    // Mực nước
+// --- CONFIG CÁ (ĐÃ CHỈNH CHẬM LẠI) ---
+const int FISH_JUMP_CHANCE = 40;
+// [EDIT] Trọng lực giảm để cá rơi chậm như bay (0.25 -> 0.15)
+const float FISH_GRAVITY = 0.15f;
+// [EDIT] Lực nhảy giảm để phù hợp trọng lực mới (7.0 -> 5.0)
+const float FISH_JUMP_POWER_BASE = 5.0f;
+const float FISH_WATER_LEVEL = -5.0f;
 
 // HÀM TRỘN MÀU
 void mixColors(const float c1[], const float c2[], float t, float out[])
@@ -142,7 +142,10 @@ void resetGame()
     fuel = 100.0f;
     score = 0;
     planeY = 100.0f;
-    gameSpeed = 0.6f;
+
+    // [EDIT] Reset về tốc độ chậm
+    gameSpeed = 0.3f;
+
     damageFlashAlpha = 0.0f;
     dayCycle = 0.0f;
     viewMode = 0;
@@ -517,10 +520,8 @@ void drawFish(const GameObject &f)
     glPushMatrix();
     glTranslatef(f.x, f.y, f.z);
 
-    // Nếu đang bơi (state 0 hoặc 2) thì lắc lư nhẹ
     if (f.state != 1)
         glRotatef(sin(wavePhase * 2.0f) * 10.0f, 0.0f, 0.0f, 1.0f);
-    // Nếu đang nhảy (state 1) thì hướng đầu theo vận tốc
     else
     {
         float angle = atan2(f.vy, 5.0f) * 180.0f / M_PI;
@@ -776,7 +777,8 @@ void update(int value)
     if (gameSpeed < MAX_SPEED)
         gameSpeed += SPEED_INC;
 
-    dayCycle += 0.002f;
+    // [EDIT] Mặt trời quay chậm hơn (0.002 -> 0.0005)
+    dayCycle += 0.0005f;
     if (dayCycle > 2 * M_PI)
         dayCycle -= 2 * M_PI;
 
@@ -859,49 +861,42 @@ void update(int value)
         p.life -= 0.05f;
     }
 
-    // --- LOGIC CÁ NHẢY NGẪU NHIÊN VÀ CHẬM HƠN (UPDATED) ---
     for (auto &f : fishes)
     {
-        // Nếu trạng thái là 0 (chưa quyết định) hoặc 2 (quyết định không nhảy)
         if (f.state == 0 || f.state == 2)
         {
-            f.x -= (3.0f * gameSpeed); // Di chuyển sang trái
+            f.x -= (3.0f * gameSpeed);
 
-            if (f.state == 0) // Chỉ kiểm tra nếu chưa quyết định
+            if (f.state == 0)
             {
-                // Vùng kích hoạt hẹp hơn một chút để quyết định rõ ràng
                 if (f.x < 50.0f && f.x > -50.0f)
                 {
-                    // Tung xúc xắc
                     if ((rand() % 100) < FISH_JUMP_CHANCE)
                     {
-                        f.state = 1; // QUYẾT ĐỊNH NHẢY
-                        // Lực nhảy ngẫu nhiên nhẹ nhàng hơn
+                        f.state = 1;
                         f.vy = FISH_JUMP_POWER_BASE + (float)(rand() % 6);
                     }
                     else
                     {
-                        f.state = 2; // QUYẾT ĐỊNH KHÔNG NHẢY (bơi luôn)
+                        f.state = 2;
                     }
                 }
             }
         }
-        else if (f.state == 1) // Đang nhảy
+        else if (f.state == 1)
         {
-            f.x -= (3.0f * gameSpeed); // Vẫn di chuyển sang trái khi nhảy
-            f.y += f.vy;               // Thay đổi độ cao
-            f.vy -= FISH_GRAVITY;      // Trọng lực kéo xuống từ từ
+            f.x -= (3.0f * gameSpeed);
+            f.y += f.vy;
+            f.vy -= FISH_GRAVITY;
 
-            // Kiểm tra nếu rơi xuống lại mặt nước
             if (f.y < FISH_WATER_LEVEL && f.vy < 0)
             {
-                f.state = 2;            // Chuyển về trạng thái bơi
-                f.y = FISH_WATER_LEVEL; // Đặt lại vị trí mặt nước
+                f.state = 2;
+                f.y = FISH_WATER_LEVEL;
                 f.vy = 0;
             }
         }
     }
-    // -------------------------------------------------------
 
     for (auto &c : clouds)
     {
@@ -1016,6 +1011,70 @@ void update(int value)
     glutTimerFunc(16, update, 0);
 }
 
+// --- DISPLAY ---
+void display()
+{
+    float dayFactor = (cos(dayCycle) + 1.0f) / 2.0f;
+
+    float currentSky[4];
+    float currentLightDiffuse[4];
+    float currentLightAmbient[4];
+
+    mixColors(COLOR_SKY_NIGHT, COLOR_SKY_DAY, dayFactor, currentSky);
+    mixColors(LIGHT_NIGHT_DIFFUSE, LIGHT_DAY_DIFFUSE, dayFactor, currentLightDiffuse);
+    mixColors(LIGHT_NIGHT_AMBIENT, LIGHT_DAY_AMBIENT, dayFactor, currentLightAmbient);
+
+    glClearColor(currentSky[0], currentSky[1], currentSky[2], 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glLoadIdentity();
+
+    glFogfv(GL_FOG_COLOR, currentSky);
+
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, currentLightDiffuse);
+    glLightfv(GL_LIGHT0, GL_AMBIENT, currentLightAmbient);
+
+    float lightPos[] = {0.0f, 500.0f, 0.0f, 0.0f};
+    glPushMatrix();
+    glRotatef(-dayCycle * 180.0f / M_PI, 0.0f, 0.0f, 1.0f);
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+    glPopMatrix();
+
+    if (viewMode == 0)
+    {
+        float rad = cameraAngle * M_PI / 180.0f;
+        float eyeX = sin(rad) * cameraDist;
+        float eyeZ = cos(rad) * cameraDist;
+        gluLookAt(eyeX, cameraHeight, eyeZ, 0.0f, planeY, 0.0f, 0.0f, 1.0f, 0.0f);
+    }
+    else
+    {
+        gluLookAt(-160.0f, planeY + 30.0f, 0.0f,
+                  200.0f, planeY, 0.0f,
+                  0.0f, 1.0f, 0.0f);
+    }
+
+    drawSunAndMoon();
+
+    drawSea();
+    drawClouds();
+    drawEntities();
+    drawPlane();
+    drawUI();
+
+    glutSwapBuffers();
+}
+
+void reshape(int w, int h)
+{
+    if (h == 0)
+        h = 1;
+    glViewport(0, 0, w, h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(60.0, (float)w / h, 1.0, 1000.0);
+    glMatrixMode(GL_MODELVIEW);
+}
+
 // --- INPUT ---
 void mouseMotion(int x, int y)
 {
@@ -1076,72 +1135,6 @@ void keyboard(unsigned char key, int x, int y)
         resetGame();
     if (key == 27)
         exit(0);
-}
-
-// --- DISPLAY ---
-void display()
-{
-    float dayFactor = (cos(dayCycle) + 1.0f) / 2.0f;
-
-    float currentSky[4];
-    float currentLightDiffuse[4];
-    float currentLightAmbient[4];
-
-    mixColors(COLOR_SKY_NIGHT, COLOR_SKY_DAY, dayFactor, currentSky);
-    mixColors(LIGHT_NIGHT_DIFFUSE, LIGHT_DAY_DIFFUSE, dayFactor, currentLightDiffuse);
-    mixColors(LIGHT_NIGHT_AMBIENT, LIGHT_DAY_AMBIENT, dayFactor, currentLightAmbient);
-
-    glClearColor(currentSky[0], currentSky[1], currentSky[2], 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glLoadIdentity();
-
-    glFogfv(GL_FOG_COLOR, currentSky);
-
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, currentLightDiffuse);
-    glLightfv(GL_LIGHT0, GL_AMBIENT, currentLightAmbient);
-
-    float lightPos[] = {0.0f, 500.0f, 0.0f, 0.0f};
-    glPushMatrix();
-    glRotatef(-dayCycle * 180.0f / M_PI, 0.0f, 0.0f, 1.0f);
-    glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
-    glPopMatrix();
-
-    if (viewMode == 0)
-    {
-        // --- CHẾ ĐỘ 0: MẶC ĐỊNH (Bên hông) ---
-        float rad = cameraAngle * M_PI / 180.0f;
-        float eyeX = sin(rad) * cameraDist;
-        float eyeZ = cos(rad) * cameraDist;
-        gluLookAt(eyeX, cameraHeight, eyeZ, 0.0f, planeY, 0.0f, 0.0f, 1.0f, 0.0f);
-    }
-    else
-    {
-        // --- CHẾ ĐỘ 1: GÓC NHÌN CHASE (Sau đuôi máy bay) ---
-        gluLookAt(-160.0f, planeY + 30.0f, 0.0f, // Eye
-                  200.0f, planeY, 0.0f,          // Center
-                  0.0f, 1.0f, 0.0f);             // Up
-    }
-
-    drawSunAndMoon();
-
-    drawSea();
-    drawClouds();
-    drawEntities();
-    drawPlane();
-    drawUI();
-
-    glutSwapBuffers();
-}
-
-void reshape(int w, int h)
-{
-    if (h == 0)
-        h = 1;
-    glViewport(0, 0, w, h);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluPerspective(60.0, (float)w / h, 1.0, 1000.0);
-    glMatrixMode(GL_MODELVIEW);
 }
 
 int main(int argc, char **argv)
